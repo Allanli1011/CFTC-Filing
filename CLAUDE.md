@@ -4,7 +4,7 @@
 
 **CFTC COT Monitor** is a Python application that fetches CFTC Commitments of Traders (COT) reports, stores them in a local database, analyzes positioning for investment signals, and displays results in a Streamlit dashboard.
 
-**Purpose:** Monitor speculator and commercial hedger positioning across 14 key futures markets (Gold, Oil, S&P 500, FX, Grains, etc.) to identify crowded trades and high-conviction reversal setups.
+**Purpose:** Monitor speculator and commercial hedger positioning across **49 futures markets in 8 sectors** (Grains, Softs, Livestock, Energy, Metals, Equities, Rates, FX) to identify crowded trades and high-conviction reversal setups.
 
 ---
 
@@ -151,7 +151,8 @@ All config is in `.env` (see `.env.example`). Key variables:
 ### Adding a New Market
 1. Add `"CONTRACT_CODE": "Market Name"` to `WATCHED_MARKETS` in `src/config.py`
 2. Add its yfinance ticker to `PRICE_TICKERS` in `src/config.py`
-3. Re-run `python main.py backfill` to load historical data
+3. Add the contract code to the appropriate sector list in `SECTOR_GROUPS` in `src/dashboard/app.py` (keeps sidebar and tab filters consistent)
+4. Re-run `python main.py backfill` to load historical data
 
 ### Adding a New Signal Type
 1. Implement the detection logic in `src/analyzer/signals.py`
@@ -184,4 +185,5 @@ Socrata API uses inconsistent column naming (e.g., `noncomm_postions_spread_all`
 3. **No live trading**: This tool generates positioning analysis signals only. Do not add order execution, brokerage API calls, or automated trading logic.
 4. **Data quality**: COT data is released weekly with a 3-day lag (Tuesday data → Friday release). The scheduler accounts for this.
 5. **SQLite vs PostgreSQL**: The default `DATABASE_URL` uses SQLite. Switch to PostgreSQL + TimescaleDB for production use by changing `DATABASE_URL` in `.env`.
-6. **Watched markets list**: `WATCHED_MARKETS` in `config.py` is the single source of truth for which markets are monitored.
+6. **Watched markets list**: `WATCHED_MARKETS` in `config.py` is the single source of truth for which markets are monitored. `SECTOR_GROUPS` in `src/dashboard/app.py` mirrors it for UI grouping — keep them in sync when adding/removing markets.
+7. **Dashboard sector grouping**: The `SECTOR_GROUPS` dict in `app.py` drives the sidebar sector filter, Market Overview tabs, Signals sector filter, and Correlation Matrix sector selector. It is intentionally separate from `config.py` (UI concern only).

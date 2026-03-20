@@ -1,6 +1,6 @@
 # CFTC COT Monitor
 
-Monitor CFTC Commitments of Traders (COT) reports and generate investment signals across 14 key futures markets.
+Monitor CFTC Commitments of Traders (COT) reports and generate investment signals across **49 futures markets spanning 8 sectors**.
 
 ## What It Does
 
@@ -11,9 +11,18 @@ Monitor CFTC Commitments of Traders (COT) reports and generate investment signal
 | **3** | Smart money vs speculator divergence signals, backtesting vs price returns |
 | **4** | Multi-asset correlation, Risk-On/Off indicator, sector confluence signals |
 
-## Covered Markets
+## Covered Markets (49 total)
 
-Gold, Silver, Copper, Crude Oil, Natural Gas, S&P 500, Euro FX, JPY, GBP, 10-Year T-Note, 2-Year T-Note, Corn, Soybeans, Wheat
+| Sector | Markets |
+|--------|---------|
+| **Grains** | Corn, Wheat (Chicago/KC/Minneapolis), Soybeans, Soybean Oil/Meal, Oats, Rough Rice |
+| **Softs** | Cotton #2, Coffee, Sugar #11, Cocoa, Orange Juice |
+| **Livestock** | Live Cattle, Feeder Cattle, Lean Hogs, Class III Milk |
+| **Energy** | Crude Oil (WTI/Brent), Natural Gas, Heating Oil (ULSD), RBOB Gasoline |
+| **Metals** | Gold, Silver, Copper, Platinum, Palladium |
+| **Equity Indices** | S&P 500 E-mini, Nasdaq 100 E-mini, DJIA E-mini, Russell 2000 E-mini, VIX |
+| **Interest Rates** | 30-Yr T-Bond, 10-Yr/5-Yr/2-Yr T-Note, Fed Funds, Eurodollar |
+| **FX** | EUR, JPY, GBP, CHF, CAD, AUD, MXN, NZD, BRL, RUB |
 
 ## Quick Start
 
@@ -50,11 +59,11 @@ python main.py dashboard     # Launch Streamlit dashboard
 
 ## Dashboard Pages
 
-- **Market Overview** — COT Index heatmap for all 14 markets
-- **Positioning Analysis** — Per-market deep dive (Legacy, Disaggregated, TFF tabs)
-- **Signals & Alerts** — Filterable signal table with strength and direction
+- **Market Overview** — Extreme-signal callout row + sector tabs (All / Grains / Softs / Livestock / Energy / Metals / Equities / Rates / FX), each with a sortable table and horizontal COT Index bar chart
+- **Positioning Analysis** — Per-market deep dive (Legacy, Disaggregated, TFF tabs); sidebar filters by sector first, then market
+- **Signals & Alerts** — Filterable signal table; filter by Sector, Direction, Signal Type, and minimum strength
 - **Backtesting** — Historical signal hit rate vs price returns (via yfinance)
-- **Multi-Asset Analysis** — Correlation matrix, Risk-On/Off indicator, confluence signals
+- **Multi-Asset Analysis** — Sector-selectable correlation matrix (auto-scales for readability), Risk-On/Off indicator, confluence signals
 
 ## Key Signals Explained
 
