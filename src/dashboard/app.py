@@ -23,6 +23,26 @@ from src.storage.db import (
     get_latest_signals,
 )
 from src.config import WATCHED_MARKETS, PRICE_TICKERS, COT_INDEX_LOOKBACK
+
+# ── Sector grouping (mirrors WATCHED_MARKETS order) ───────────────────────────
+SECTOR_GROUPS: dict[str, list[str]] = {
+    "Grains":    ["002602", "001602", "0006KW", "001612", "005602",
+                  "007601", "026603", "004603", "039601"],
+    "Softs":     ["033661", "083731", "080732", "073732", "040701"],
+    "Livestock": ["057642", "061642", "054642", "052641"],
+    "Energy":    ["067651", "06765T", "023651", "022651", "111659"],
+    "Metals":    ["088691", "084691", "085692", "076651", "075651"],
+    "Equities":  ["13874A", "209742", "12460+", "239742", "1170E1"],
+    "Rates":     ["020601", "043602", "044601", "042601", "045601", "132741"],
+    "FX":        ["099741", "097741", "096742", "092741", "090741",
+                  "232741", "095741", "112741", "102741", "089741"],
+}
+
+def _code_to_sector(code: str) -> str:
+    for sector, codes in SECTOR_GROUPS.items():
+        if code in codes:
+            return sector
+    return "Other"
 from src.analyzer.positioning import compute_legacy_metrics, compute_disagg_metrics, compute_financial_metrics
 from src.analyzer.sentiment import add_sentiment
 from src.analyzer.multi_asset import build_cot_index_panel, correlation_matrix, risk_on_off_indicator
@@ -58,7 +78,16 @@ page = st.sidebar.radio(
      "Backtesting", "Multi-Asset Analysis"],
 )
 
-market_options = {v: k for k, v in WATCHED_MARKETS.items()}  # name → code
+sector_choice = st.sidebar.selectbox(
+    "Sector", ["All"] + list(SECTOR_GROUPS.keys()), index=0
+)
+if sector_choice == "All":
+    filtered_markets = WATCHED_MARKETS
+else:
+    sector_codes = SECTOR_GROUPS.get(sector_choice, [])
+    filtered_markets = {k: v for k, v in WATCHED_MARKETS.items() if k in sector_codes}
+
+market_options = {v: k for k, v in filtered_markets.items()}  # name → code
 selected_market_name = st.sidebar.selectbox(
     "Market", list(market_options.keys()), index=0
 )
@@ -129,6 +158,7 @@ if page == "Market Overview":
     st.title("Market Overview — COT Positioning Snapshot")
     st.caption("Non-commercial (speculator) positioning percentile across all watched markets")
 
+    # Build full summary once
     summary_rows = []
     for code, name in WATCHED_MARKETS.items():
         df = get_legacy_df(code, limit=COT_INDEX_LOOKBACK + 20)
@@ -142,10 +172,8 @@ if page == "Market Overview":
         net    = row.get("noncomm_net")
         chg1w  = row.get("noncomm_net_chg1w")
         streak = row.get("noncomm_momentum_streak", 0)
-
         if idx is None or (isinstance(idx, float) and np.isnan(idx)):
             continue
-
         if idx >= 80:
             sentiment = "🔴 Extreme Long"
         elif idx >= 65:
@@ -156,9 +184,10 @@ if page == "Market Overview":
             sentiment = "🔵 Crowded Short"
         else:
             sentiment = "⚪ Neutral"
-
         summary_rows.append({
             "Market":       name,
+            "Code":         code,
+            "Sector":       _code_to_sector(code),
             "COT Index":    round(idx, 1),
             "Net Position": int(net) if net is not None else None,
             "Chg 1W":       int(chg1w) if chg1w is not None else None,
@@ -167,38 +196,79 @@ if page == "Market Overview":
             "Report Date":  str(row.get("report_date", ""))[:10],
         })
 
-    if summary_rows:
-        summary_df = pd.DataFrame(summary_rows).sort_values("COT Index", ascending=False)
-        st.dataframe(
-            summary_df,
-            use_container_width=True,
-            hide_index=True,
-            column_config={
-                "COT Index": st.column_config.ProgressColumn(
-                    "COT Index", min_value=0, max_value=100, format="%.1f"
-                ),
-            },
-        )
-
-        # Quick bar chart
-        import plotly.express as px
-        bar_colors = ["#d50000" if v >= 80 else "#ff6d00" if v >= 65
-                      else "#00c853" if v <= 20 else "#1565c0" if v <= 35
-                      else "#90a4ae"
-                      for v in summary_df["COT Index"]]
-        fig = px.bar(
-            summary_df, x="Market", y="COT Index",
-            color="COT Index",
-            color_continuous_scale=["#00c853", "#90a4ae", "#d50000"],
-            range_color=[0, 100],
-            title="Non-Commercial COT Index by Market",
-        )
-        fig.add_hline(y=80, line_dash="dash", line_color="#d50000", annotation_text="Extreme Long (80)")
-        fig.add_hline(y=20, line_dash="dash", line_color="#00c853", annotation_text="Extreme Short (20)")
-        fig.update_layout(height=420, showlegend=False)
-        st.plotly_chart(fig, use_container_width=True)
-    else:
+    if not summary_rows:
         no_data_warning("overview")
+    else:
+        import plotly.express as px
+        summary_df = pd.DataFrame(summary_rows)
+
+        # ── Top: extreme signals callout ──────────────────────────────────────
+        extremes = summary_df[
+            (summary_df["COT Index"] >= 80) | (summary_df["COT Index"] <= 20)
+        ].sort_values("COT Index", ascending=False)
+        if not extremes.empty:
+            st.markdown(f"**{len(extremes)} extreme signals detected:**")
+            cols = st.columns(min(len(extremes), 4))
+            for i, (_, r) in enumerate(extremes.iterrows()):
+                with cols[i % 4]:
+                    delta_color = "inverse" if r["COT Index"] >= 80 else "normal"
+                    st.metric(
+                        r["Market"],
+                        f"{r['COT Index']:.0f}th pct",
+                        delta=r["Sentiment"],
+                        delta_color="off",
+                    )
+            st.markdown("---")
+
+        # ── Sector tabs ───────────────────────────────────────────────────────
+        sector_names = list(SECTOR_GROUPS.keys())
+        tabs = st.tabs(["All"] + sector_names)
+
+        def _render_sector_view(df_sect: pd.DataFrame):
+            df_sect = df_sect.sort_values("COT Index", ascending=False)
+            # Table
+            st.dataframe(
+                df_sect.drop(columns=["Code", "Sector"]),
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    "COT Index": st.column_config.ProgressColumn(
+                        "COT Index", min_value=0, max_value=100, format="%.1f"
+                    ),
+                },
+            )
+            # Bar chart – horizontal so long market names don't overlap
+            fig = px.bar(
+                df_sect,
+                x="COT Index", y="Market",
+                orientation="h",
+                color="COT Index",
+                color_continuous_scale=["#00c853", "#90a4ae", "#d50000"],
+                range_color=[0, 100],
+                title="COT Index by Market",
+            )
+            fig.add_vline(x=80, line_dash="dash", line_color="#d50000",
+                          annotation_text="80", annotation_position="top")
+            fig.add_vline(x=20, line_dash="dash", line_color="#00c853",
+                          annotation_text="20", annotation_position="top")
+            fig.update_layout(
+                height=max(300, len(df_sect) * 30 + 80),
+                showlegend=False,
+                margin=dict(l=10, r=40, t=50, b=30),
+                yaxis=dict(autorange="reversed"),
+            )
+            st.plotly_chart(fig, use_container_width=True)
+
+        with tabs[0]:  # All
+            _render_sector_view(summary_df)
+
+        for i, sector in enumerate(sector_names):
+            with tabs[i + 1]:
+                sect_df = summary_df[summary_df["Sector"] == sector]
+                if sect_df.empty:
+                    st.info(f"No data for {sector}")
+                else:
+                    _render_sector_view(sect_df)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -325,21 +395,32 @@ elif page == "Signals & Alerts":
     if sigs_df.empty:
         st.info("No signals yet. Generate signals or fetch data first.")
     else:
+        # Enrich signals with sector
+        code_to_sector = {code: _code_to_sector(code) for code in WATCHED_MARKETS}
+        sigs_df["sector"] = sigs_df["market_code"].map(code_to_sector).fillna("Other")
+
         # Filter controls
-        col1, col2, col3 = st.columns(3)
+        col1, col2, col3, col4 = st.columns(4)
         with col1:
+            sector_filter = st.multiselect(
+                "Sector",
+                list(SECTOR_GROUPS.keys()),
+                default=list(SECTOR_GROUPS.keys()),
+            )
+        with col2:
             dir_filter = st.multiselect("Direction", ["bullish", "bearish", "neutral"],
                                         default=["bullish", "bearish"])
-        with col2:
+        with col3:
             type_filter = st.multiselect(
                 "Signal Type",
                 sigs_df["signal_type"].unique().tolist(),
                 default=sigs_df["signal_type"].unique().tolist(),
             )
-        with col3:
+        with col4:
             min_strength = st.slider("Min Strength", 0, 100, 70)
 
         filtered = sigs_df[
+            sigs_df["sector"].isin(sector_filter) &
             sigs_df["direction"].isin(dir_filter) &
             sigs_df["signal_type"].isin(type_filter) &
             (sigs_df["strength"] >= min_strength)
@@ -354,7 +435,7 @@ elif page == "Signals & Alerts":
         filtered[""] = filtered["direction"].apply(direction_icon)
 
         st.dataframe(
-            filtered[["", "report_date", "market_name", "signal_type", "direction",
+            filtered[["", "sector", "report_date", "market_name", "signal_type", "direction",
                        "strength", "cot_index", "net_position", "description"]].head(100),
             use_container_width=True,
             hide_index=True,
@@ -466,19 +547,47 @@ elif page == "Multi-Asset Analysis":
 
     with tab2:
         st.subheader("Cross-Market COT Index Correlation (52-Week)")
+
+        corr_col1, corr_col2 = st.columns([2, 1])
+        with corr_col1:
+            selected_sectors_corr = st.multiselect(
+                "Sectors to include",
+                list(SECTOR_GROUPS.keys()),
+                default=["Metals", "Energy", "Equities", "Rates", "FX"],
+                key="corr_sectors",
+            )
+        with corr_col2:
+            st.caption("Tip: start with 2–3 sectors for a readable heatmap.")
+
+        # Resolve selected codes from chosen sectors
+        corr_codes = [
+            code for sector in selected_sectors_corr
+            for code in SECTOR_GROUPS.get(sector, [])
+            if code in WATCHED_MARKETS
+        ]
+
         with st.spinner("Building correlation matrix..."):
             panel = build_cot_index_panel()
 
         if panel.empty:
             no_data_warning("correlation matrix")
         else:
-            corr = correlation_matrix(panel)
-            if not corr.empty:
-                st.plotly_chart(correlation_heatmap(corr), use_container_width=True)
-                st.caption(
-                    "Correlation of COT Index (speculator positioning percentile) across markets. "
-                    "Strong negative correlation between pairs like EUR and Gold reflects USD as common driver."
+            # Filter panel columns to selected markets
+            available = [c for c in corr_codes if c in panel.columns]
+            if len(available) < 2:
+                st.warning("Select at least 2 sectors with available data.")
+            else:
+                # Rename columns from code to name for readability
+                panel_sub = panel[available].rename(
+                    columns={c: WATCHED_MARKETS[c] for c in available}
                 )
+                corr = correlation_matrix(panel_sub)
+                if not corr.empty:
+                    st.plotly_chart(correlation_heatmap(corr), use_container_width=True)
+                    st.caption(
+                        "Correlation of COT Index (speculator positioning percentile) across markets. "
+                        "Strong negative correlation between pairs like EUR and Gold reflects USD as common driver."
+                    )
 
     with tab3:
         st.subheader("Multi-Asset Confluence Signals")

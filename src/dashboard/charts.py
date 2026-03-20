@@ -106,7 +106,15 @@ def dual_positioning_chart(
 
 
 def correlation_heatmap(corr_df: pd.DataFrame) -> go.Figure:
-    """Heatmap of cross-market COT Index correlations."""
+    """Heatmap of cross-market COT Index correlations. Height scales with market count."""
+    n = len(corr_df)
+    cell_px = 38
+    height = max(380, n * cell_px + 120)
+    label_margin = max(120, max(len(s) for s in corr_df.columns) * 7)
+
+    # Hide text labels when there are too many cells to avoid clutter
+    show_text = n <= 15
+
     fig = go.Figure(go.Heatmap(
         z=corr_df.values,
         x=corr_df.columns.tolist(),
@@ -114,14 +122,16 @@ def correlation_heatmap(corr_df: pd.DataFrame) -> go.Figure:
         colorscale="RdBu",
         zmid=0,
         zmin=-1, zmax=1,
-        text=corr_df.values.round(2),
-        texttemplate="%{text}",
-        colorbar_title="Correlation",
+        text=corr_df.values.round(2) if show_text else None,
+        texttemplate="%{text}" if show_text else None,
+        colorbar_title="Corr",
+        hoverongaps=False,
+        hovertemplate="%{y} / %{x}: %{z:.2f}<extra></extra>",
     ))
     fig.update_layout(
-        title="COT Index Cross-Market Correlations (52-Week)",
-        height=500,
-        margin=dict(l=120, r=40, t=60, b=120),
+        title=f"COT Index Cross-Market Correlations (52-Week) — {n}×{n}",
+        height=height,
+        margin=dict(l=label_margin, r=40, t=60, b=label_margin),
     )
     fig.update_xaxes(tickangle=45)
     return fig
