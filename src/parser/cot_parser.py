@@ -27,8 +27,10 @@ def _safe_float(val: Any) -> float | None:
 def _parse_date(val: Any) -> date | None:
     if val is None:
         return None
-    if isinstance(val, (date, datetime)):
-        return val if isinstance(val, date) else val.date()
+    if isinstance(val, datetime):   # datetime is a subclass of date, check first
+        return val.date()
+    if isinstance(val, date):
+        return val
     s = str(val).split("T")[0]
     for fmt in ("%Y-%m-%d", "%m/%d/%Y", "%y%m%d"):
         try:
