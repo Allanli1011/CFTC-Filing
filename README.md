@@ -11,7 +11,7 @@ Monitor CFTC Commitments of Traders (COT) reports and generate investment signal
 | **3** | Smart money vs speculator divergence signals, backtesting vs price returns |
 | **4** | Multi-asset correlation, Risk-On/Off indicator, sector confluence signals |
 
-## Covered Markets (49 total)
+## Covered Markets (52 total)
 
 | Sector | Markets |
 |--------|---------|
@@ -23,6 +23,7 @@ Monitor CFTC Commitments of Traders (COT) reports and generate investment signal
 | **Equity Indices** | S&P 500 E-mini, Nasdaq 100 E-mini, DJIA E-mini, Russell 2000 E-mini, VIX |
 | **Interest Rates** | 30-Yr T-Bond, 10-Yr/5-Yr/2-Yr T-Note, Fed Funds, Eurodollar |
 | **FX** | EUR, JPY, GBP, CHF, CAD, AUD, MXN, NZD, BRL, RUB |
+| **Crypto** | Bitcoin, Ethereum, Micro Bitcoin |
 
 ## Quick Start
 

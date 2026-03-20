@@ -111,6 +111,11 @@ WATCHED_MARKETS: dict[str, str] = {
     "112741": "New Zealand Dollar",
     "102741": "Brazilian Real",
     "089741": "Russian Ruble",
+
+    # ── Crypto ────────────────────────────────────────────────────────────────
+    "133741": "Bitcoin",
+    "146021": "Ethereum",
+    "133742": "Micro Bitcoin",
 }
 
 # Map CFTC contract code → yfinance ticker (for backtesting price data)
@@ -165,6 +170,10 @@ PRICE_TICKERS: dict[str, str] = {
     "095741": "6M=F",    # Mexican Peso
     "112741": "6N=F",    # New Zealand Dollar
     "102741": "6L=F",    # Brazilian Real
+    # Crypto
+    "133741": "BTC=F",   # Bitcoin
+    "146021": "ETH=F",   # Ethereum
+    "133742": "MBT=F",   # Micro Bitcoin
 }
 
 # ── Scheduler ─────────────────────────────────────────────────────────────────
