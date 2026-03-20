@@ -26,11 +26,16 @@ logger = logging.getLogger(__name__)
 
 # Logical market groups for confluence analysis
 MARKET_GROUPS: dict[str, list[str]] = {
-    "commodities":  ["088691", "084691", "085692", "067651", "023651"],  # Gold, Silver, Copper, Oil, Gas
-    "grains":       ["002602", "005602", "001602"],                       # Corn, Soybeans, Wheat
-    "currencies":   ["099741", "097741", "096742"],                       # EUR, JPY, GBP
-    "equity":       ["13874A"],                                            # S&P 500
-    "rates":        ["043602", "020601"],                                  # 10Y, 2Y T-Note
+    "precious_metals": ["088691", "084691", "076651", "075651"],           # Gold, Silver, Platinum, Palladium
+    "industrial_metals": ["085692"],                                         # Copper
+    "energy":          ["067651", "06765T", "023651", "022651", "111659"], # WTI, Brent, NatGas, HO, RBOB
+    "grains":          ["002602", "005602", "001602", "0006KW", "007601", "026603"],  # Corn, Soy, Wheat × 2, SoyOil, SoyMeal
+    "softs":           ["033661", "083731", "080732", "073732", "040701"], # Cotton, Coffee, Sugar, Cocoa, OJ
+    "livestock":       ["057642", "061642", "054642"],                      # Live Cattle, Feeder, Hogs
+    "currencies":      ["099741", "097741", "096742", "092741", "090741", "232741", "112741"],  # EUR,JPY,GBP,CHF,CAD,AUD,NZD
+    "em_currencies":   ["095741", "102741", "089741"],                      # MXN, BRL, RUB
+    "equity":          ["13874A", "209742", "12460+", "239742"],            # SP500, NQ, DJIA, Russell
+    "rates":           ["020601", "043602", "044601", "042601", "045601"], # 30Y,10Y,5Y,2Y, Fed Funds
 }
 
 # Known inverse relationships (when A is long, B tends to be short)
@@ -38,14 +43,25 @@ INVERSE_PAIRS: list[tuple[str, str]] = [
     ("099741", "088691"),  # EUR long ↔ Gold long (USD weakness)
     ("097741", "067651"),  # JPY long ↔ Oil short (risk-off)
     ("13874A", "043602"),  # Equity long ↔ Bonds short (risk-on)
+    ("13874A", "088691"),  # Equity long ↔ Gold short (risk-on)
+    ("097741", "13874A"),  # JPY long ↔ Equity short (risk-off)
+    ("085692", "097741"),  # Copper long ↔ JPY short (growth/risk-on)
 ]
 
 # Known positive relationships
 POSITIVE_PAIRS: list[tuple[str, str]] = [
     ("088691", "084691"),  # Gold ↔ Silver
-    ("088691", "085692"),  # Gold ↔ Copper
-    ("067651", "023651"),  # Oil ↔ Natural Gas
+    ("088691", "076651"),  # Gold ↔ Platinum
+    ("088691", "085692"),  # Gold ↔ Copper (dollar-negative trades)
+    ("067651", "023651"),  # WTI ↔ Natural Gas
+    ("067651", "06765T"),  # WTI ↔ Brent
+    ("067651", "111659"),  # WTI ↔ RBOB Gasoline
     ("002602", "005602"),  # Corn ↔ Soybeans
+    ("002602", "001602"),  # Corn ↔ Wheat
+    ("005602", "007601"),  # Soybeans ↔ Soybean Oil
+    ("099741", "232741"),  # EUR ↔ AUD (risk-on currencies)
+    ("099741", "112741"),  # EUR ↔ NZD
+    ("209742", "13874A"),  # Nasdaq ↔ S&P 500
 ]
 
 
@@ -181,27 +197,40 @@ def multi_asset_confluence_signals() -> list[dict]:
                 "description":    desc,
             })
 
-    # Grain sector: all three crowded same direction = sector-wide signal
-    grain_series = [(code, _load_cot_index_series(code)) for code in MARKET_GROUPS["grains"]]
-    grain_series = [(c, s) for c, s in grain_series if s is not None]
-    if len(grain_series) >= 2:
-        latest = {c: s.iloc[-1] for c, s in grain_series}
+    # Sector consensus: check each group for aligned extremes
+    sector_checks = [
+        ("grains",           "GRAINS",   "Grain Sector"),
+        ("softs",            "SOFTS",    "Soft Commodities"),
+        ("precious_metals",  "METALS",   "Precious Metals"),
+        ("energy",           "ENERGY",   "Energy Complex"),
+        ("livestock",        "LIVESTOCK","Livestock"),
+        ("equity",           "EQUITY",   "Equity Indices"),
+    ]
+    for group_key, code_label, display_name in sector_checks:
+        group_codes = MARKET_GROUPS.get(group_key, [])
+        series_pairs = [(c, _load_cot_index_series(c)) for c in group_codes]
+        series_pairs = [(c, s) for c, s in series_pairs if s is not None]
+        if len(series_pairs) < 2:
+            continue
+        latest = {c: s.iloc[-1] for c, s in series_pairs}
         all_long  = all(v >= 75 for v in latest.values())
         all_short = all(v <= 25 for v in latest.values())
-        if all_long or all_short:
-            direction = "bearish" if all_long else "bullish"
-            signals.append({
-                "contract_code":  "GRAINS",
-                "market_name":    "Grain Sector (Corn/Soybeans/Wheat)",
-                "paired_market":  None,
-                "signal_type":    "sector_consensus",
-                "direction":      direction,
-                "alignment_score": 100.0,
-                "description":    (
-                    f"ALL grain markets show {'extreme long' if all_long else 'extreme short'} COT positioning. "
-                    f"Sector-wide {'bearish (contrarian)' if all_long else 'bullish (contrarian)'} signal."
-                ),
-            })
+        if not all_long and not all_short:
+            continue
+        direction = "bearish" if all_long else "bullish"
+        signals.append({
+            "contract_code":   code_label,
+            "market_name":     display_name,
+            "paired_market":   None,
+            "signal_type":     "sector_consensus",
+            "direction":       direction,
+            "alignment_score": 100.0,
+            "description":     (
+                f"ALL {display_name} markets show "
+                f"{'extreme long' if all_long else 'extreme short'} COT positioning. "
+                f"Sector-wide {'bearish (contrarian)' if all_long else 'bullish (contrarian)'} signal."
+            ),
+        })
 
     return signals
 
