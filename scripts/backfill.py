@@ -32,21 +32,14 @@ def backfill_legacy(period: str, watched_codes: list[str]) -> None:
 
 def backfill_disaggregated(period: str, watched_codes: list[str]) -> None:
     from src.fetcher.cot_fetcher import download_bulk, read_bulk_csv
-    from src.parser.cot_parser import parse_legacy_df  # re-use, fields match enough
+    from src.parser.cot_parser import parse_disaggregated_df
     from src.storage.db import upsert_disaggregated
-    from src.parser.cot_parser import parse_legacy_rows
-    import pandas as pd
 
-    # Disaggregated needs its own parser via API, bulk uses different column names.
-    # For bulk backfill we go via Socrata for simplicity (slower but correct).
-    from src.fetcher.cot_fetcher import fetch_latest_disaggregated
-    from src.parser.cot_parser import parse_disaggregated_rows
-
-    logger.info("Disaggregated bulk via Socrata (full history may take a few minutes)...")
-    rows_raw = fetch_latest_disaggregated(codes=watched_codes, weeks=600)
-    rows     = parse_disaggregated_rows(rows_raw)
-    n        = upsert_disaggregated(rows)
-    logger.info("Disaggregated: inserted %d rows", n)
+    path = download_bulk("disaggregated", period)
+    df   = read_bulk_csv(path)
+    rows = parse_disaggregated_df(df, watched_codes=watched_codes)
+    n    = upsert_disaggregated(rows)
+    logger.info("Disaggregated %s: inserted %d rows", period, n)
 
 
 def backfill_financial(period: str, watched_codes: list[str]) -> None:
@@ -84,10 +77,11 @@ def main() -> None:
                 logger.error("Legacy %s failed: %s", period, e)
 
     if args.type in ("disaggregated", "all"):
-        try:
-            backfill_disaggregated("hist", codes)
-        except Exception as e:
-            logger.error("Disaggregated backfill failed: %s", e)
+        for period in periods:
+            try:
+                backfill_disaggregated(period, codes)
+            except Exception as e:
+                logger.error("Disaggregated %s failed: %s", period, e)
 
     if args.type in ("financial", "all"):
         try:

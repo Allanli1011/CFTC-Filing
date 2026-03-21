@@ -2,10 +2,11 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
+from datetime import date
 from typing import Generator
 
 import pandas as pd
-from sqlalchemy import create_engine, select, and_, desc
+from sqlalchemy import create_engine, select, and_, desc, func
 from sqlalchemy.orm import Session, sessionmaker
 
 from src.config import DATABASE_URL
@@ -36,6 +37,23 @@ def get_session() -> Generator[Session, None, None]:
         raise
     finally:
         session.close()
+
+
+# ── Latest-date helpers (for incremental fetch) ───────────────────────────────
+
+def get_latest_report_date_legacy() -> date | None:
+    with get_session() as s:
+        return s.scalar(select(func.max(COTLegacy.report_date)))
+
+
+def get_latest_report_date_disaggregated() -> date | None:
+    with get_session() as s:
+        return s.scalar(select(func.max(COTDisaggregated.report_date)))
+
+
+def get_latest_report_date_financial() -> date | None:
+    with get_session() as s:
+        return s.scalar(select(func.max(COTFinancial.report_date)))
 
 
 # ── Upsert helpers ────────────────────────────────────────────────────────────
@@ -136,10 +154,27 @@ def get_financial_df(contract_code: str | None = None, limit: int = 500) -> pd.D
     return df
 
 
-def save_signals(signals: list[dict]) -> None:
+def save_signals(signals: list[dict]) -> int:
+    """Upsert signals keyed on (contract_code, report_date, signal_type). Returns inserted count."""
+    inserted = 0
     with get_session() as s:
         for sig in signals:
-            s.add(Signal(**sig))
+            existing = s.scalar(
+                select(Signal).where(
+                    and_(
+                        Signal.contract_code == sig["contract_code"],
+                        Signal.report_date   == sig["report_date"],
+                        Signal.signal_type   == sig["signal_type"],
+                    )
+                )
+            )
+            if existing is None:
+                s.add(Signal(**sig))
+                inserted += 1
+            else:
+                for k, v in sig.items():
+                    setattr(existing, k, v)
+    return inserted
 
 
 def get_latest_signals(limit: int = 100) -> pd.DataFrame:

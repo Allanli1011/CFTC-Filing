@@ -166,6 +166,7 @@ class COTFinancial(Base):
 class Signal(Base):
     """Generated trading signals based on COT analysis."""
     __tablename__ = "signals"
+    __table_args__ = (UniqueConstraint("contract_code", "report_date", "signal_type"),)
 
     id             = Column(Integer, primary_key=True)
     contract_code  = Column(String(16), nullable=False, index=True)

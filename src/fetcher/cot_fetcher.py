@@ -4,7 +4,7 @@ from __future__ import annotations
 import io
 import logging
 import zipfile
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 import httpx
@@ -59,30 +59,61 @@ def _fetch_socrata(dataset_id: str, where: str | None = None, limit: int = _PAGE
     return rows
 
 
-def fetch_latest_legacy(codes: list[str] | None = None, weeks: int = 52) -> list[dict]:
-    """Fetch last N weeks of Legacy COT from Socrata for watched markets."""
+def fetch_latest_legacy(
+    codes: list[str] | None = None,
+    weeks: int = 52,
+    since: date | None = None,
+) -> list[dict]:
+    """Fetch Legacy COT from Socrata.
+
+    If *since* is given, fetches all rows after that date (incremental update).
+    Otherwise fetches the last *weeks* rows per market.
+    """
     codes = codes or list(WATCHED_MARKETS.keys())
     code_list = ", ".join(f"'{c}'" for c in codes)
     where = f"cftc_contract_market_code in({code_list})"
-    rows = _fetch_socrata(SOCRATA_LEGACY_FUTURES, where=where, limit=len(codes) * weeks + 100)
+    if since is not None:
+        where += f" AND report_date_as_yyyy_mm_dd > '{since.isoformat()}'"
+        limit = len(codes) * 52 + 100  # generous upper bound for catch-up
+    else:
+        limit = len(codes) * weeks + 100
+    rows = _fetch_socrata(SOCRATA_LEGACY_FUTURES, where=where, limit=limit)
     logger.info("Fetched %d Legacy COT rows from Socrata", len(rows))
     return rows
 
 
-def fetch_latest_disaggregated(codes: list[str] | None = None, weeks: int = 52) -> list[dict]:
+def fetch_latest_disaggregated(
+    codes: list[str] | None = None,
+    weeks: int = 52,
+    since: date | None = None,
+) -> list[dict]:
     codes = codes or list(WATCHED_MARKETS.keys())
     code_list = ", ".join(f"'{c}'" for c in codes)
     where = f"cftc_contract_market_code in({code_list})"
-    rows = _fetch_socrata(SOCRATA_DISAGGREGATED, where=where, limit=len(codes) * weeks + 100)
+    if since is not None:
+        where += f" AND report_date_as_yyyy_mm_dd > '{since.isoformat()}'"
+        limit = len(codes) * 52 + 100
+    else:
+        limit = len(codes) * weeks + 100
+    rows = _fetch_socrata(SOCRATA_DISAGGREGATED, where=where, limit=limit)
     logger.info("Fetched %d Disaggregated COT rows from Socrata", len(rows))
     return rows
 
 
-def fetch_latest_financial(codes: list[str] | None = None, weeks: int = 52) -> list[dict]:
+def fetch_latest_financial(
+    codes: list[str] | None = None,
+    weeks: int = 52,
+    since: date | None = None,
+) -> list[dict]:
     codes = codes or list(WATCHED_MARKETS.keys())
     code_list = ", ".join(f"'{c}'" for c in codes)
     where = f"cftc_contract_market_code in({code_list})"
-    rows = _fetch_socrata(SOCRATA_TFF, where=where, limit=len(codes) * weeks + 100)
+    if since is not None:
+        where += f" AND report_date_as_yyyy_mm_dd > '{since.isoformat()}'"
+        limit = len(codes) * 52 + 100
+    else:
+        limit = len(codes) * weeks + 100
+    rows = _fetch_socrata(SOCRATA_TFF, where=where, limit=limit)
     logger.info("Fetched %d TFF COT rows from Socrata", len(rows))
     return rows
 
@@ -119,13 +150,28 @@ def _download_zip(url: str, dest: Path) -> None:
                     f.write(chunk)
 
 
+_CURRENT_ZIP_TTL_DAYS = 7  # re-download current-year ZIP if older than this
+
+
 def download_bulk(report_type: str = "legacy", period: str = "hist", force: bool = False) -> Path:
-    """Download bulk ZIP file. Returns local path. Skips if cached."""
+    """Download bulk ZIP file. Returns local path.
+
+    Historical ZIPs are cached forever (static archive).
+    Current-year ZIPs are re-downloaded when the cache is older than
+    _CURRENT_ZIP_TTL_DAYS, because CFTC updates the file weekly.
+    """
     url = _BULK_URLS[report_type][period]
     dest = _cache_path(report_type, period)
     if dest.exists() and not force:
-        logger.info("Using cached %s", dest)
-        return dest
+        if period == "current":
+            age = datetime.now() - datetime.fromtimestamp(dest.stat().st_mtime)
+            if age < timedelta(days=_CURRENT_ZIP_TTL_DAYS):
+                logger.info("Using cached %s (age %dd)", dest, age.days)
+                return dest
+            logger.info("Cache expired (%dd old), re-downloading %s", age.days, dest)
+        else:
+            logger.info("Using cached %s", dest)
+            return dest
     _download_zip(url, dest)
     return dest
 

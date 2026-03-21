@@ -27,23 +27,52 @@ def cmd_init() -> None:
 
 
 def cmd_fetch() -> None:
+    from datetime import timedelta
     from src.fetcher.cot_fetcher import fetch_latest_legacy, fetch_latest_disaggregated, fetch_latest_financial
     from src.parser.cot_parser import parse_legacy_rows, parse_disaggregated_rows, parse_financial_rows
-    from src.storage.db import upsert_legacy, upsert_disaggregated, upsert_financial, init_db
+    from src.storage.db import (
+        upsert_legacy, upsert_disaggregated, upsert_financial, init_db,
+        get_latest_report_date_legacy, get_latest_report_date_disaggregated,
+        get_latest_report_date_financial,
+    )
 
-    weeks = 8
+    # Fallback window used when the DB is empty (first run without backfill).
+    fallback_weeks = 8
     if len(sys.argv) > 2 and sys.argv[2].isdigit():
-        weeks = int(sys.argv[2])
+        fallback_weeks = int(sys.argv[2])
 
     init_db()
-    print(f"Fetching Legacy COT (last {weeks} weeks)...")
-    n1 = upsert_legacy(parse_legacy_rows(fetch_latest_legacy(weeks=weeks)))
 
-    print(f"Fetching Disaggregated COT (last {weeks} weeks)...")
-    n2 = upsert_disaggregated(parse_disaggregated_rows(fetch_latest_disaggregated(weeks=weeks)))
+    # For each table, fetch from the day after its latest stored report date
+    # (with a 1-week overlap to catch any late CFTC revisions).
+    # If the table is empty, fall back to fetching the last N weeks.
+    def _since(latest_date, overlap_weeks: int = 1):
+        if latest_date is None:
+            return None
+        return latest_date - timedelta(weeks=overlap_weeks)
 
-    print(f"Fetching Financial (TFF) COT (last {weeks} weeks)...")
-    n3 = upsert_financial(parse_financial_rows(fetch_latest_financial(weeks=weeks)))
+    since_legacy = _since(get_latest_report_date_legacy())
+    since_disagg = _since(get_latest_report_date_disaggregated())
+    since_fin    = _since(get_latest_report_date_financial())
+
+    label_legacy = f"since {since_legacy}" if since_legacy else f"last {fallback_weeks} weeks"
+    label_disagg = f"since {since_disagg}" if since_disagg else f"last {fallback_weeks} weeks"
+    label_fin    = f"since {since_fin}"    if since_fin    else f"last {fallback_weeks} weeks"
+
+    print(f"Fetching Legacy COT ({label_legacy})...")
+    n1 = upsert_legacy(parse_legacy_rows(
+        fetch_latest_legacy(weeks=fallback_weeks, since=since_legacy)
+    ))
+
+    print(f"Fetching Disaggregated COT ({label_disagg})...")
+    n2 = upsert_disaggregated(parse_disaggregated_rows(
+        fetch_latest_disaggregated(weeks=fallback_weeks, since=since_disagg)
+    ))
+
+    print(f"Fetching Financial (TFF) COT ({label_fin})...")
+    n3 = upsert_financial(parse_financial_rows(
+        fetch_latest_financial(weeks=fallback_weeks, since=since_fin)
+    ))
 
     print(f"Done — inserted: {n1} legacy, {n2} disaggregated, {n3} financial rows")
 

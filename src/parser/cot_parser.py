@@ -210,10 +210,78 @@ def _disagg_row_from_api(r: dict) -> dict | None:
     }
 
 
+def _disagg_row_from_df_row(r: pd.Series) -> dict | None:
+    """Map a bulk CSV row (column names lowercased) to COTDisaggregated model fields."""
+    rd = _parse_date(r.get("report_date_as_yyyy-mm-dd") or r.get("as_of_date_in_form_yymmdd"))
+    code = str(r.get("cftc_contract_market_code", "")).strip()
+    if not rd or not code:
+        return None
+
+    def gi(col: str) -> int | None:
+        return _safe_int(r.get(col))
+
+    p_long  = gi("prod_merc_positions_long_all")
+    p_short = gi("prod_merc_positions_short_all")
+    s_long  = gi("swap_positions_long_all")
+    s_short = gi("swap__positions_short_all") or gi("swap_positions_short_all")
+    m_long  = gi("m_money_positions_long_all")
+    m_short = gi("m_money_positions_short_all")
+    o_long  = gi("other_rept_positions_long_all")
+    o_short = gi("other_rept_positions_short_all")
+
+    def net(l, s):
+        return (l - s) if l is not None and s is not None else None
+
+    return {
+        "contract_code":     code,
+        "market_name":       str(r.get("market_and_exchange_names", "")).strip(),
+        "report_date":       rd,
+        "open_interest":     gi("open_interest_all"),
+        "prod_long":         p_long,
+        "prod_short":        p_short,
+        "prod_net":          net(p_long, p_short),
+        "swap_long":         s_long,
+        "swap_short":        s_short,
+        "swap_spread":       gi("swap__positions_spread_all") or gi("swap_positions_spread_all"),
+        "swap_net":          net(s_long, s_short),
+        "mmoney_long":       m_long,
+        "mmoney_short":      m_short,
+        "mmoney_spread":     gi("m_money_positions_spread_all"),
+        "mmoney_net":        net(m_long, m_short),
+        "other_long":        o_long,
+        "other_short":       o_short,
+        "other_net":         net(o_long, o_short),
+        "nonrept_long":      gi("nonrept_positions_long_all"),
+        "nonrept_short":     gi("nonrept_positions_short_all"),
+        "chg_open_interest": gi("change_in_open_interest_all"),
+        "chg_prod_long":     gi("change_in_prod_merc_long_all"),
+        "chg_prod_short":    gi("change_in_prod_merc_short_all"),
+        "chg_swap_long":     gi("change_in_swap_long_all"),
+        "chg_swap_short":    gi("change_in_swap_short_all"),
+        "chg_mmoney_long":   gi("change_in_m_money_long_all"),
+        "chg_mmoney_short":  gi("change_in_m_money_short_all"),
+    }
+
+
 def parse_disaggregated_rows(api_rows: list[dict]) -> list[dict]:
     out = [_disagg_row_from_api(r) for r in api_rows]
     out = [x for x in out if x]
     logger.info("Parsed %d/%d Disaggregated rows", len(out), len(api_rows))
+    return out
+
+
+def parse_disaggregated_df(df: pd.DataFrame, watched_codes: list[str] | None = None) -> list[dict]:
+    """Parse a disaggregated bulk CSV DataFrame into DB-ready dicts."""
+    df.columns = [c.lower().strip() for c in df.columns]
+    if watched_codes:
+        col = next((c for c in df.columns if "contract_market_code" in c), None)
+        if col:
+            df = df[df[col].astype(str).str.strip().isin(watched_codes)]
+    out = []
+    for _, row in df.iterrows():
+        parsed = _disagg_row_from_df_row(row)
+        if parsed:
+            out.append(parsed)
     return out
 
 
