@@ -34,23 +34,28 @@ def _socrata_url(dataset_id: str) -> str:
 
 
 def _fetch_socrata(dataset_id: str, where: str | None = None, limit: int = _PAGE) -> list[dict]:
-    """Fetch rows from a Socrata dataset with optional $where filter."""
-    params: dict[str, str | int] = {"$limit": limit, "$order": "report_date_as_yyyy_mm_dd DESC"}
+    """Fetch rows from a Socrata dataset with optional $where filter, up to total limit."""
+    params: dict[str, str | int] = {"$order": "report_date_as_yyyy_mm_dd DESC"}
     if where:
         params["$where"] = where
 
     rows: list[dict] = []
     offset = 0
     with httpx.Client(timeout=60, headers=_SOCRATA_HEADERS) as client:
-        while True:
+        while len(rows) < limit:
+            batch_size = min(_PAGE, limit - len(rows))
+            params["$limit"] = batch_size
             params["$offset"] = offset
+            
             resp = client.get(_socrata_url(dataset_id), params=params)
             resp.raise_for_status()
             batch = resp.json()
-            rows.extend(batch)
-            if len(batch) < _PAGE:
+            if not batch:
                 break
-            offset += _PAGE
+            rows.extend(batch)
+            if len(batch) < batch_size:
+                break
+            offset += len(batch)
     return rows
 
 
@@ -86,15 +91,15 @@ def fetch_latest_financial(codes: list[str] | None = None, weeks: int = 52) -> l
 
 _BULK_URLS: dict[str, dict[str, str]] = {
     "legacy": {
-        "hist": f"{CFTC_BULK_BASE}/fut_fin_txt_hist_2010_2023.zip",
+        "hist": f"{CFTC_BULK_BASE}/fut_fin_txt_hist_2010_2025.zip",
         "current": f"{CFTC_BULK_BASE}/fut_fin_txt_{date.today().year}.zip",
     },
     "disaggregated": {
-        "hist": f"{CFTC_BULK_BASE}/fut_disagg_txt_hist_2006_2023.zip",
+        "hist": f"{CFTC_BULK_BASE}/fut_disagg_txt_hist_2006_2025.zip",
         "current": f"{CFTC_BULK_BASE}/fut_disagg_txt_{date.today().year}.zip",
     },
     "financial": {
-        "hist": f"{CFTC_BULK_BASE}/fin_fut_txt_hist_2010_2023.zip",
+        "hist": f"{CFTC_BULK_BASE}/fin_fut_txt_hist_2010_2025.zip",
         "current": f"{CFTC_BULK_BASE}/fin_fut_txt_{date.today().year}.zip",
     },
 }

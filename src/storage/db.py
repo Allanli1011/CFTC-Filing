@@ -107,36 +107,33 @@ def upsert_financial(rows: list[dict]) -> int:
 # ── Query helpers ─────────────────────────────────────────────────────────────
 
 def get_legacy_df(contract_code: str | None = None, limit: int = 500) -> pd.DataFrame:
-    with get_session() as s:
-        q = select(COTLegacy).order_by(desc(COTLegacy.report_date)).limit(limit)
-        if contract_code:
-            q = q.where(COTLegacy.contract_code == contract_code)
-        rows = s.scalars(q).all()
-    if not rows:
-        return pd.DataFrame()
-    return pd.DataFrame([r.__dict__ for r in rows]).drop(columns=["_sa_instance_state"], errors="ignore")
+    q = select(COTLegacy).order_by(desc(COTLegacy.report_date)).limit(limit)
+    if contract_code:
+        q = q.where(COTLegacy.contract_code == contract_code)
+    
+    with engine.connect() as conn:
+        df = pd.read_sql(q, conn)
+    return df
 
 
 def get_disaggregated_df(contract_code: str | None = None, limit: int = 500) -> pd.DataFrame:
-    with get_session() as s:
-        q = select(COTDisaggregated).order_by(desc(COTDisaggregated.report_date)).limit(limit)
-        if contract_code:
-            q = q.where(COTDisaggregated.contract_code == contract_code)
-        rows = s.scalars(q).all()
-    if not rows:
-        return pd.DataFrame()
-    return pd.DataFrame([r.__dict__ for r in rows]).drop(columns=["_sa_instance_state"], errors="ignore")
+    q = select(COTDisaggregated).order_by(desc(COTDisaggregated.report_date)).limit(limit)
+    if contract_code:
+        q = q.where(COTDisaggregated.contract_code == contract_code)
+    
+    with engine.connect() as conn:
+        df = pd.read_sql(q, conn)
+    return df
 
 
 def get_financial_df(contract_code: str | None = None, limit: int = 500) -> pd.DataFrame:
-    with get_session() as s:
-        q = select(COTFinancial).order_by(desc(COTFinancial.report_date)).limit(limit)
-        if contract_code:
-            q = q.where(COTFinancial.contract_code == contract_code)
-        rows = s.scalars(q).all()
-    if not rows:
-        return pd.DataFrame()
-    return pd.DataFrame([r.__dict__ for r in rows]).drop(columns=["_sa_instance_state"], errors="ignore")
+    q = select(COTFinancial).order_by(desc(COTFinancial.report_date)).limit(limit)
+    if contract_code:
+        q = q.where(COTFinancial.contract_code == contract_code)
+    
+    with engine.connect() as conn:
+        df = pd.read_sql(q, conn)
+    return df
 
 
 def save_signals(signals: list[dict]) -> None:

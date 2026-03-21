@@ -18,8 +18,8 @@ DATABASE_URL: str = os.getenv("DATABASE_URL", f"sqlite:///{DATA_DIR}/cftc.db")
 SOCRATA_APP_TOKEN: str = os.getenv("SOCRATA_APP_TOKEN", "")
 
 # Socrata dataset IDs
-SOCRATA_LEGACY_FUTURES = "jun7-i38e"
-SOCRATA_DISAGGREGATED   = "72hh-3qpy"
+SOCRATA_LEGACY_FUTURES = "6dca-aqww"
+SOCRATA_DISAGGREGATED   = "kh3c-gbw2"
 SOCRATA_TFF             = "gpe5-46if"
 SOCRATA_BASE_URL        = "https://publicreporting.cftc.gov/resource"
 

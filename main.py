@@ -9,6 +9,7 @@ Commands:
     python main.py schedule      Start weekly auto-update scheduler
     python main.py dashboard     Launch Streamlit dashboard
 """
+import os
 import sys
 import logging
 
@@ -30,15 +31,19 @@ def cmd_fetch() -> None:
     from src.parser.cot_parser import parse_legacy_rows, parse_disaggregated_rows, parse_financial_rows
     from src.storage.db import upsert_legacy, upsert_disaggregated, upsert_financial, init_db
 
+    weeks = 8
+    if len(sys.argv) > 2 and sys.argv[2].isdigit():
+        weeks = int(sys.argv[2])
+
     init_db()
-    print("Fetching Legacy COT...")
-    n1 = upsert_legacy(parse_legacy_rows(fetch_latest_legacy(weeks=8)))
+    print(f"Fetching Legacy COT (last {weeks} weeks)...")
+    n1 = upsert_legacy(parse_legacy_rows(fetch_latest_legacy(weeks=weeks)))
 
-    print("Fetching Disaggregated COT...")
-    n2 = upsert_disaggregated(parse_disaggregated_rows(fetch_latest_disaggregated(weeks=8)))
+    print(f"Fetching Disaggregated COT (last {weeks} weeks)...")
+    n2 = upsert_disaggregated(parse_disaggregated_rows(fetch_latest_disaggregated(weeks=weeks)))
 
-    print("Fetching Financial (TFF) COT...")
-    n3 = upsert_financial(parse_financial_rows(fetch_latest_financial(weeks=8)))
+    print(f"Fetching Financial (TFF) COT (last {weeks} weeks)...")
+    n3 = upsert_financial(parse_financial_rows(fetch_latest_financial(weeks=weeks)))
 
     print(f"Done — inserted: {n1} legacy, {n2} disaggregated, {n3} financial rows")
 
