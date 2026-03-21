@@ -398,7 +398,7 @@ elif page == "Signals & Alerts":
     else:
         # Enrich signals with sector
         code_to_sector = {code: _code_to_sector(code) for code in WATCHED_MARKETS}
-        sigs_df["sector"] = sigs_df["market_code"].map(code_to_sector).fillna("Other")
+        sigs_df["sector"] = sigs_df["contract_code"].map(code_to_sector).fillna("Other")
 
         # Filter controls
         col1, col2, col3, col4 = st.columns(4)

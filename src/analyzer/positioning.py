@@ -64,9 +64,9 @@ def compute_legacy_metrics(df: pd.DataFrame, lookback: int = COT_INDEX_LOOKBACK)
     count = 0
     for d in direction:
         if d > 0:
-            count = max(count + 1, 1)
+            count = count + 1 if count > 0 else 1
         elif d < 0:
-            count = min(count - 1, -1)
+            count = count - 1 if count < 0 else -1
         else:
             count = 0
         streak.append(count)

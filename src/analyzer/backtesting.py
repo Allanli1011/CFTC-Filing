@@ -52,13 +52,14 @@ def align_cot_with_prices(cot_df: pd.DataFrame, price_df: pd.DataFrame) -> pd.Da
         entry_price = future_prices.iloc[0]["price"]
 
         # Forward returns at 1, 4, 12, 26 weeks
+        row_dict = row.to_dict()
+        row_dict["entry_price"] = entry_price
         for weeks in [1, 4, 12, 26]:
             target_date = cot_date + timedelta(weeks=weeks)
             future = price_df[price_df.index >= target_date]
             if future.empty:
                 continue
             exit_price = future.iloc[0]["price"]
-            row_dict = row.to_dict()
             row_dict[f"fwd_return_{weeks}w"] = (exit_price / entry_price - 1) * 100
         merged_rows.append(row_dict)
 
