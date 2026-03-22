@@ -99,8 +99,11 @@ def compute_financial_metrics(df: pd.DataFrame, lookback: int = COT_INDEX_LOOKBA
     df = df.copy()
     df = df.sort_values("report_date").reset_index(drop=True)
 
-    df["levmoney_cot_index"]  = cot_index(df["levmoney_net"].astype(float), lookback)
-    df["assetmgr_cot_index"]  = cot_index(df["assetmgr_net"].astype(float), lookback)
+    df["levmoney_net"]  = pd.to_numeric(df["levmoney_net"], errors="coerce")
+    df["assetmgr_net"]  = pd.to_numeric(df["assetmgr_net"], errors="coerce")
+
+    df["levmoney_cot_index"]  = cot_index(df["levmoney_net"], lookback)
+    df["assetmgr_cot_index"]  = cot_index(df["assetmgr_net"], lookback)
 
     df["levmoney_net_pct"]  = df["levmoney_net"]  / df["open_interest"].replace(0, np.nan) * 100
     df["assetmgr_net_pct"]  = df["assetmgr_net"]  / df["open_interest"].replace(0, np.nan) * 100

@@ -178,6 +178,16 @@ Socrata API uses inconsistent column naming (e.g., `noncomm_postions_spread_all`
 
 ---
 
+## Known Gotchas
+
+1. **yfinance weekly futures data**: `yf.download(interval="1wk")` returns incomplete data for many futures tickers over long periods. The backtesting module works around this by downloading daily data and resampling to weekly with `resample("W-FRI")`.
+2. **Signal dedup key**: The `signals` table unique constraint is `(contract_code, report_date, signal_type, signal_source)`. The `signal_source` column is critical — without it, signals from different report types (legacy vs financial) for the same market overwrite each other.
+3. **Backtest forward returns**: `fetch_price_data` end date must extend beyond the last COT report date by at least `forward_weeks` to compute forward returns for recent signals.
+4. **Eurodollar → SOFR**: CME Eurodollar futures (CFTC code `132741`) were delisted June 2023. Replaced by SOFR-3M (code `134741`, ticker `SR3=F`). Do not re-add Eurodollar.
+5. **Financial metrics NoneType**: `compute_financial_metrics` must coerce `levmoney_net` / `assetmgr_net` with `pd.to_numeric(errors="coerce")` before arithmetic — some DB rows contain None values that cause `NoneType - NoneType` errors.
+
+---
+
 ## Notes for AI Assistants
 
 1. **Percentile interpretation**: High COT Index = crowded longs = **bearish** contrarian signal. This counter-intuitive relationship is intentional and correct.

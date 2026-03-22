@@ -162,9 +162,10 @@ def save_signals(signals: list[dict]) -> int:
             existing = s.scalar(
                 select(Signal).where(
                     and_(
-                        Signal.contract_code == sig["contract_code"],
-                        Signal.report_date   == sig["report_date"],
-                        Signal.signal_type   == sig["signal_type"],
+                        Signal.contract_code  == sig["contract_code"],
+                        Signal.report_date    == sig["report_date"],
+                        Signal.signal_type    == sig["signal_type"],
+                        Signal.signal_source  == sig.get("signal_source"),
                     )
                 )
             )
@@ -182,9 +183,14 @@ def get_latest_signals(limit: int = 100) -> pd.DataFrame:
         rows = s.scalars(
             select(Signal).order_by(desc(Signal.report_date), desc(Signal.strength)).limit(limit)
         ).all()
-    if not rows:
-        return pd.DataFrame()
-    return pd.DataFrame([r.__dict__ for r in rows]).drop(columns=["_sa_instance_state"], errors="ignore")
+        if not rows:
+            return pd.DataFrame()
+        # Convert to dicts while session is still open (before commit expires objects)
+        data = [
+            {c.key: getattr(r, c.key) for c in Signal.__table__.columns}
+            for r in rows
+        ]
+    return pd.DataFrame(data)
 
 
 def was_alert_sent(signal_id: int, channel: str) -> bool:

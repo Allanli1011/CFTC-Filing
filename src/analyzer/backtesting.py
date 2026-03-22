@@ -16,14 +16,23 @@ logger = logging.getLogger(__name__)
 
 
 def fetch_price_data(ticker: str, start: str, end: str) -> pd.DataFrame:
-    """Download weekly closing price for a futures ticker via yfinance."""
+    """Download weekly closing price for a futures ticker via yfinance.
+
+    Uses daily data resampled to weekly because yfinance's ``interval="1wk"``
+    returns incomplete results for many futures tickers over long date ranges.
+    """
     try:
         import yfinance as yf
-        df = yf.download(ticker, start=start, end=end, interval="1wk", progress=False, auto_adjust=True)
+        df = yf.download(ticker, start=start, end=end, interval="1d", progress=False, auto_adjust=True)
         if df.empty:
             return pd.DataFrame()
+        # yfinance >= 0.2.18 returns multi-level columns; flatten them
+        if isinstance(df.columns, pd.MultiIndex):
+            df.columns = df.columns.get_level_values(0)
         df = df[["Close"]].rename(columns={"Close": "price"})
         df.index = pd.to_datetime(df.index).tz_localize(None)
+        # Resample daily → weekly (Friday close) to align with COT release cycle
+        df = df.resample("W-FRI").last().dropna()
         return df
     except Exception as e:
         logger.warning("yfinance failed for %s: %s", ticker, e)
@@ -54,7 +63,7 @@ def align_cot_with_prices(cot_df: pd.DataFrame, price_df: pd.DataFrame) -> pd.Da
         # Forward returns at 1, 4, 12, 26 weeks
         row_dict = row.to_dict()
         row_dict["entry_price"] = entry_price
-        for weeks in [1, 4, 12, 26]:
+        for weeks in [1, 4, 8, 12, 26]:
             target_date = cot_date + timedelta(weeks=weeks)
             future = price_df[price_df.index >= target_date]
             if future.empty:
@@ -98,17 +107,12 @@ def backtest_cot_index_signal(
     df = df[df["signal"] != "flat"].copy()
 
     # Hit rate: short → negative forward return is a win; long → positive is a win
-    df["hit"] = df.apply(
-        lambda r: (r["signal"] == "short" and r[fwd_col] < 0)
-                  or (r["signal"] == "long" and r[fwd_col] > 0),
-        axis=1,
-    )
+    is_short = df["signal"] == "short"
+    is_long  = df["signal"] == "long"
+    df["hit"] = (is_short & (df[fwd_col] < 0)) | (is_long & (df[fwd_col] > 0))
 
     # Adjusted return: flip sign for shorts
-    df["adj_return"] = df.apply(
-        lambda r: -r[fwd_col] if r["signal"] == "short" else r[fwd_col],
-        axis=1,
-    )
+    df["adj_return"] = np.where(is_short, -df[fwd_col], df[fwd_col])
 
     result_cols = ["report_date", "signal", cot_index_col, fwd_col, "hit", "adj_return"]
     result_cols = [c for c in result_cols if c in df.columns]
@@ -169,7 +173,9 @@ def run_full_backtest(
         return pd.DataFrame(), {}
 
     start = str(cot_df["report_date"].min())[:10]
-    end   = str(cot_df["report_date"].max())[:10]
+    # Extend end date beyond last COT report so forward returns can be computed
+    end_dt = pd.to_datetime(cot_df["report_date"].max()) + timedelta(weeks=forward_weeks + 4)
+    end = str(end_dt)[:10]
 
     price_df = fetch_price_data(price_ticker, start, end)
     if price_df.empty:

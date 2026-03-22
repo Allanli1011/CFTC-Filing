@@ -33,7 +33,7 @@ SECTOR_GROUPS: dict[str, list[str]] = {
     "Energy":    ["067651", "06765T", "023651", "022651", "111659"],
     "Metals":    ["088691", "084691", "085692", "076651", "075651"],
     "Equities":  ["13874A", "209742", "12460+", "239742", "1170E1"],
-    "Rates":     ["020601", "043602", "044601", "042601", "045601", "132741"],
+    "Rates":     ["020601", "043602", "044601", "042601", "045601", "134741"],
     "FX":        ["099741", "097741", "096742", "092741", "090741",
                   "232741", "095741", "112741", "102741", "089741"],
     "Crypto":    ["133741", "146021", "133742"],
@@ -409,8 +409,10 @@ elif page == "Signals & Alerts":
                 default=list(SECTOR_GROUPS.keys()),
             )
         with col2:
-            dir_filter = st.multiselect("Direction", ["bullish", "bearish", "neutral"],
-                                        default=["bullish", "bearish"])
+            all_directions = sorted(sigs_df["direction"].dropna().unique().tolist())
+            if not all_directions:
+                all_directions = ["bullish", "bearish", "neutral"]
+            dir_filter = st.multiselect("Direction", all_directions, default=all_directions)
         with col3:
             type_filter = st.multiselect(
                 "Signal Type",
@@ -418,7 +420,7 @@ elif page == "Signals & Alerts":
                 default=sigs_df["signal_type"].unique().tolist(),
             )
         with col4:
-            min_strength = st.slider("Min Strength", 0, 100, 70)
+            min_strength = st.slider("Min Strength", 0, 100, 0)
 
         filtered = sigs_df[
             sigs_df["sector"].isin(sector_filter) &
@@ -461,7 +463,7 @@ elif page == "Backtesting":
     with col2:
         short_thresh = st.slider("Extreme Short Threshold", 5, 40, 20)
     with col3:
-        fwd_weeks = st.selectbox("Forward Return Period", [4, 8, 12, 26], index=2)
+        fwd_weeks = st.selectbox("Forward Return Period", [1, 4, 8, 12, 26], index=3)
 
     if st.button("Run Backtest"):
         ticker = PRICE_TICKERS.get(selected_code)
@@ -493,9 +495,11 @@ elif page == "Backtesting":
 
                 col1, col2 = st.columns(2)
                 with col1:
-                    st.metric("Long Hit Rate",  f"{summary.get('long_hit_rate', 0):.1f}%")
+                    lhr = summary.get("long_hit_rate")
+                    st.metric("Long Hit Rate", f"{lhr:.1f}%" if lhr is not None else "N/A")
                 with col2:
-                    st.metric("Short Hit Rate", f"{summary.get('short_hit_rate', 0):.1f}%")
+                    shr = summary.get("short_hit_rate")
+                    st.metric("Short Hit Rate", f"{shr:.1f}%" if shr is not None else "N/A")
 
                 st.plotly_chart(
                     backtest_cumulative_return_chart(bt_df, selected_market_name),
@@ -560,9 +564,9 @@ elif page == "Multi-Asset Analysis":
         with corr_col2:
             st.caption("Tip: start with 2–3 sectors for a readable heatmap.")
 
-        # Resolve selected codes from chosen sectors
-        corr_codes = [
-            code for sector in selected_sectors_corr
+        # Resolve selected market names from chosen sectors
+        corr_names = [
+            WATCHED_MARKETS[code] for sector in selected_sectors_corr
             for code in SECTOR_GROUPS.get(sector, [])
             if code in WATCHED_MARKETS
         ]
@@ -573,15 +577,12 @@ elif page == "Multi-Asset Analysis":
         if panel.empty:
             no_data_warning("correlation matrix")
         else:
-            # Filter panel columns to selected markets
-            available = [c for c in corr_codes if c in panel.columns]
+            # Filter panel columns to selected markets (panel columns are market names)
+            available = [c for c in corr_names if c in panel.columns]
             if len(available) < 2:
                 st.warning("Select at least 2 sectors with available data.")
             else:
-                # Rename columns from code to name for readability
-                panel_sub = panel[available].rename(
-                    columns={c: WATCHED_MARKETS[c] for c in available}
-                )
+                panel_sub = panel[available]
                 corr = correlation_matrix(panel_sub)
                 if not corr.empty:
                     st.plotly_chart(correlation_heatmap(corr), use_container_width=True)

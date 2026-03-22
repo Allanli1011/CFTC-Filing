@@ -98,7 +98,7 @@ WATCHED_MARKETS: dict[str, str] = {
     "044601": "5-Year T-Note",
     "042601": "2-Year T-Note",
     "045601": "Fed Funds",
-    "132741": "Eurodollar",
+    "134741": "SOFR-3M",
 
     # ── Currencies ────────────────────────────────────────────────────────────
     "099741": "Euro FX",
@@ -160,6 +160,7 @@ PRICE_TICKERS: dict[str, str] = {
     "043602": "ZN=F",    # 10-Year T-Note
     "044601": "ZF=F",    # 5-Year T-Note
     "042601": "ZT=F",    # 2-Year T-Note
+    "134741": "SR3=F",   # SOFR-3M
     # Currencies
     "099741": "6E=F",    # Euro
     "097741": "6J=F",    # Japanese Yen
